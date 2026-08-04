@@ -11,14 +11,12 @@ Usage:
     python3 plot_temps.py
 
     # Specify host and/or time range
-    python3 plot_temps.py --host 10.0.0.64 --from "2026-08-03T16:04" --to "2026-08-03T18:16"
+    python3 plot_temps.py --host 10.0.0.64 --from "2026-08-03T00:00" --to "2026-08-04T00:00"
 
     # Skip downloading and just plot a CSV you already have
     python3 plot_temps.py --csv data.csv
 
-Run this on a machine that's actually on the same local network as the
-device (e.g. your own computer) -- it won't work from a sandboxed/cloud
-environment that has no route to your LAN.
+Run this on a machine that's actually on the same local network as the device.
 """
 
 import argparse
@@ -32,7 +30,7 @@ import matplotlib.dates as mdates
 
 DEFAULT_HOST = "10.0.0.64"
 DEFAULT_FROM_TS = "2026-08-03T00:00"
-DEFAULT_TO_TS = "2026-08-05T00:00"
+DEFAULT_TO_TS = "2026-08-13T00:00"
 
 
 def download_csv(host: str, from_ts: str, to_ts: str, dest_path: str, timeout: float = 15.0) -> str:
@@ -63,6 +61,9 @@ def plot_temperatures(csv_path: str, output_path: str) -> None:
 
     for col, color in zip(sensor_cols, colors):
         ax.plot(df["Time"], df[col], label=col, color=color, linewidth=1.8)
+
+    for threshold in (4, -18):
+        ax.axhline(threshold, color="red", linestyle="--", linewidth=1.2, alpha=0.8)
 
     ax.set_title("Temperature Sensor Readings", fontsize=14, fontweight="bold")
     ax.set_xlabel("Time")
