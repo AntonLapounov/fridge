@@ -2,6 +2,9 @@
 <html>
 <head><title>Temperature Dashboard</title><meta http-equiv="refresh" content="300"></head>
 <body style="text-align:center;font-family:sans-serif;">
-  <img src="temperature_plot.png" style="max-width:95%;">
+  <img id="plot" style="max-width:95%;">
+  <script>
+    document.getElementById("plot").src = "temperature_plot.png?t=" + Date.now();
+  </script>
 </body>
 </html>
