@@ -55,6 +55,11 @@ def plot_temperatures(csv_path: str, output_path: str) -> None:
 
     sensor_cols = [c for c in df.columns if c != "Time"]
 
+    # A sensor read failure is reported as -273.2 C. Treat anything below
+    # -50 C as a failed reading and drop it (as a gap) rather than plot it.
+    FAILED_READING_THRESHOLD = -50
+    df[sensor_cols] = df[sensor_cols].where(df[sensor_cols] >= FAILED_READING_THRESHOLD)
+
     fig, ax = plt.subplots(figsize=(11, 6))
 
     colors = plt.cm.viridis([i / max(len(sensor_cols) - 1, 1) for i in range(len(sensor_cols))])
