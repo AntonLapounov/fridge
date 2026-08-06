@@ -29,8 +29,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 DEFAULT_HOST = "10.0.0.64"
-DEFAULT_FROM_TS = "2026-08-03T00:00"
-DEFAULT_TO_TS = "2026-08-13T00:00"
+DEFAULT_FROM_TS = "2026-08-01T00:00"
+DEFAULT_TO_TS = "2026-09-01T00:00"
 
 
 def download_csv(host: str, from_ts: str, to_ts: str, dest_path: str, timeout: float = 15.0) -> str:
