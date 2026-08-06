@@ -175,7 +175,7 @@ def main():
                          help=f"Range start, format YYYY-MM-DDTHH:MM (default: {DEFAULT_FROM_TS})")
     parser.add_argument("--to", dest="to_ts", default=DEFAULT_TO_TS,
                          help=f"Range end, format YYYY-MM-DDTHH:MM (default: {DEFAULT_TO_TS})")
-    parser.add_argument("--out", default="temperature_plot.png", help="Output image path")
+    parser.add_argument("--out", default="temperatures_plot.png", help="Output image path")
     parser.add_argument("--data-csv", default=DATA_CSV_PATH,
                          help=f"Persistent local data file (default: {DATA_CSV_PATH})")
     parser.add_argument("--window-hours", type=float, default=PLOT_WINDOW_HOURS,
