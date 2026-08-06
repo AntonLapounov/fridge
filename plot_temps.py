@@ -11,7 +11,7 @@ Usage:
     python3 plot_temps.py
 
     # Specify host and/or time range
-    python3 plot_temps.py --host 10.0.0.64 --from "2026-08-03T00:00" --to "2026-08-04T00:00"
+    python3 plot_temps.py --host 10.0.0.64 --from "2026-08-03T18:00" --to "2026-08-04T18:00"
 
     # Skip downloading and just plot a CSV you already have
     python3 plot_temps.py --csv data.csv
@@ -51,9 +51,31 @@ def download_csv(host: str, from_ts: str, to_ts: str, dest_path: str, timeout: f
 
 def plot_temperatures(csv_path: str, output_path: str) -> None:
     df = pd.read_csv(csv_path, parse_dates=["Time"])
-    df = df.sort_values("Time")  # file may be newest-first; put it in chronological order
+    df = df.sort_values("Time").reset_index(drop=True)  # file may be newest-first
 
     sensor_cols = [c for c in df.columns if c != "Time"]
+
+    # Insert a NaN row wherever the gap between consecutive readings exceeds
+    # this threshold, so periods where the board was offline show up as a
+    # break in the line instead of a straight interpolation across the
+    # outage. Readings are expected roughly every minute, with a few
+    # seconds of drift -- 3 minutes is comfortably above normal jitter but
+    # well below a real outage.
+    GAP_THRESHOLD_SECONDS = 3 * 60
+    diffs = df["Time"].diff().dt.total_seconds()
+    gap_threshold = GAP_THRESHOLD_SECONDS
+
+    gap_rows = []
+    for i in range(1, len(df)):
+        gap = diffs.iloc[i]
+        if gap > gap_threshold:
+            midpoint = df["Time"].iloc[i - 1] + (df["Time"].iloc[i] - df["Time"].iloc[i - 1]) / 2
+            blank = {c: (midpoint if c == "Time" else float("nan")) for c in df.columns}
+            gap_rows.append(blank)
+
+    if gap_rows:
+        df = pd.concat([df, pd.DataFrame(gap_rows)], ignore_index=True)
+        df = df.sort_values("Time").reset_index(drop=True)
 
     # A sensor read failure is reported as -273.2 C. Treat anything below
     # -50 C as a failed reading and drop it (as a gap) rather than plot it.
@@ -73,7 +95,7 @@ def plot_temperatures(csv_path: str, output_path: str) -> None:
     ax.set_title("Temperature Sensor Readings", fontsize=14, fontweight="bold")
     ax.set_xlabel("Time")
     ax.set_ylabel("Temperature (°C)")
-    ax.legend(title="Sensor", loc="best", frameon=True)
+    ax.legend(title="Sensor", loc="upper left", frameon=True)
     ax.grid(True, alpha=0.3)
 
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
