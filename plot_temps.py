@@ -4,13 +4,25 @@ Download and plot temperature readings from a PicoTemp-style sensor device.
 
 The device serves a form at http://<host>/ with a GET endpoint at
 /download?from_ts=...&to_ts=... that returns a CSV with columns:
-Time,T0,T1,T2,T3,T4
+Time,T0,T1,T2,T3,T4 (newest record first).
+
+Readings accumulate in a local data file (default: temperatures.csv).
+On each run:
+  - If the data file doesn't exist yet, it's created by downloading
+    DEFAULT_FROM_TS..DEFAULT_TO_TS (overridable with --from/--to).
+  - If it exists, only the missing tail is downloaded: from one second
+    after the newest stored record, through one hour from now (to
+    safely cover any clock skew), and merged in, newest first.
+
+The plot itself only shows the most recent 48 hours of stored data by
+default (override with --window-hours), regardless of how much history
+has accumulated in the data file.
 
 Usage:
-    # Download from the device and plot (uses default host/time range below)
+    # Download/update from the device and plot
     python3 plot_temps.py
 
-    # Specify host and/or time range
+    # Specify host, and the backfill range used only on first run
     python3 plot_temps.py --host 10.0.0.64 --from "2026-08-03T18:00" --to "2026-08-04T18:00"
 
     # Skip downloading and just plot a CSV you already have
@@ -20,6 +32,7 @@ Run this on a machine that's actually on the same local network as the device.
 """
 
 import argparse
+import os
 import sys
 import urllib.request
 import urllib.parse
@@ -29,8 +42,10 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 DEFAULT_HOST = "10.0.0.64"
-DEFAULT_FROM_TS = "2026-08-01T00:00"
-DEFAULT_TO_TS = "2026-09-01T00:00"
+DEFAULT_FROM_TS = "2026-01-01T00:00"
+DEFAULT_TO_TS = "2100-01-01T00:00"
+DATA_CSV_PATH = "temperatures.csv"
+PLOT_WINDOW_HOURS = 48
 
 
 def download_csv(host: str, from_ts: str, to_ts: str, dest_path: str, timeout: float = 15.0) -> str:
@@ -49,9 +64,55 @@ def download_csv(host: str, from_ts: str, to_ts: str, dest_path: str, timeout: f
     return dest_path
 
 
-def plot_temperatures(csv_path: str, output_path: str) -> None:
+def update_data_file(host: str, data_csv_path: str, bootstrap_from_ts: str, bootstrap_to_ts: str) -> str:
+    """
+    Bring the local data file up to date from the device.
+
+    - If data_csv_path doesn't exist: download bootstrap_from_ts..bootstrap_to_ts
+      and save it as the new data file.
+    - If it exists: download only the records newer than what's already
+      stored (top timestamp + 1 second) through one hour from now, and
+      merge them in, keeping newest-first order like the device's own CSVs.
+
+    Returns the path to the up-to-date data file.
+    """
+    if not os.path.exists(data_csv_path):
+        download_csv(host, bootstrap_from_ts, bootstrap_to_ts, data_csv_path)
+        return data_csv_path
+
+    existing_df = pd.read_csv(data_csv_path, parse_dates=["Time"])
+    if existing_df.empty:
+        download_csv(host, bootstrap_from_ts, bootstrap_to_ts, data_csv_path)
+        return data_csv_path
+
+    latest_stored = existing_df["Time"].iloc[0]  # newest-first, so row 0 is newest
+    from_ts = (latest_stored + pd.Timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%S")
+    to_ts = (pd.Timestamp.now() + pd.Timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    tmp_path = data_csv_path + ".new"
+    download_csv(host, from_ts, to_ts, tmp_path)
+    new_df = pd.read_csv(tmp_path, parse_dates=["Time"])
+    os.remove(tmp_path)
+
+    if new_df.empty:
+        print("No new records since last update.")
+        return data_csv_path
+
+    combined = pd.concat([new_df, existing_df], ignore_index=True)
+    combined = combined.drop_duplicates(subset="Time")
+    combined = combined.sort_values("Time", ascending=False).reset_index(drop=True)
+    combined.to_csv(data_csv_path, index=False)
+    print(f"Added {len(new_df)} new record(s) to {data_csv_path}")
+    return data_csv_path
+
+
+def plot_temperatures(csv_path: str, output_path: str, window_hours: float = PLOT_WINDOW_HOURS) -> None:
     df = pd.read_csv(csv_path, parse_dates=["Time"])
     df = df.sort_values("Time").reset_index(drop=True)  # file may be newest-first
+
+    if not df.empty:
+        cutoff = df["Time"].max() - pd.Timedelta(hours=window_hours)
+        df = df[df["Time"] >= cutoff].reset_index(drop=True)
 
     sensor_cols = [c for c in df.columns if c != "Time"]
 
@@ -115,20 +176,22 @@ def main():
     parser.add_argument("--to", dest="to_ts", default=DEFAULT_TO_TS,
                          help=f"Range end, format YYYY-MM-DDTHH:MM (default: {DEFAULT_TO_TS})")
     parser.add_argument("--out", default="temperature_plot.png", help="Output image path")
-    parser.add_argument("--downloaded-csv", default="downloaded.csv",
-                         help="Where to save the downloaded CSV (default: downloaded.csv)")
+    parser.add_argument("--data-csv", default=DATA_CSV_PATH,
+                         help=f"Persistent local data file (default: {DATA_CSV_PATH})")
+    parser.add_argument("--window-hours", type=float, default=PLOT_WINDOW_HOURS,
+                         help=f"How many hours of the most recent data to plot (default: {PLOT_WINDOW_HOURS})")
     args = parser.parse_args()
 
     if args.csv:
         csv_path = args.csv
     else:
         try:
-            csv_path = download_csv(args.host, args.from_ts, args.to_ts, args.downloaded_csv)
+            csv_path = update_data_file(args.host, args.data_csv, args.from_ts, args.to_ts)
         except Exception as e:
-            print(f"Failed to download CSV from device: {e}", file=sys.stderr)
+            print(f"Failed to update data from device: {e}", file=sys.stderr)
             sys.exit(1)
 
-    plot_temperatures(csv_path, args.out)
+    plot_temperatures(csv_path, args.out, args.window_hours)
 
 
 if __name__ == "__main__":
