@@ -114,6 +114,8 @@ def plot_temperatures(csv_path: str, output_path: str, window_hours: float = PLO
         cutoff = df["Time"].max() - pd.Timedelta(hours=window_hours)
         df = df[df["Time"] >= cutoff].reset_index(drop=True)
 
+    latest_timestamp = df["Time"].max() if not df.empty else None
+
     sensor_cols = [c for c in df.columns if c != "Time"]
 
     # Insert a NaN row wherever the gap between consecutive readings exceeds
@@ -154,6 +156,11 @@ def plot_temperatures(csv_path: str, output_path: str, window_hours: float = PLO
         ax.axhline(threshold, color="red", linestyle="--", linewidth=1.2, alpha=0.8)
 
     ax.set_title("Temperature Sensor Readings", fontsize=14, fontweight="bold")
+    if latest_timestamp is not None:
+        ax.set_title(
+            f"Latest reading: {latest_timestamp.strftime('%Y-%m-%d %H:%M')}",
+            fontsize=9, color="gray", loc="right", pad=12,
+        )
     ax.set_xlabel("Time")
     ax.set_ylabel("Temperature (°C)")
     ax.legend(title="Sensor", loc="upper left", frameon=True)
