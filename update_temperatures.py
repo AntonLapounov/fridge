@@ -20,13 +20,13 @@ has accumulated in the data file.
 
 Usage:
     # Download/update from the device and plot
-    python3 plot_temps.py
+    python3 update_temperatures.py
 
     # Specify host, and the backfill range used only on first run
-    python3 plot_temps.py --host 10.0.0.64 --from "2026-08-03T18:00" --to "2026-08-04T18:00"
+    python3 update_temperatures.py --host 10.0.0.64 --from "2026-08-03T18:00" --to "2026-08-04T18:00"
 
     # Skip downloading and just plot a CSV you already have
-    python3 plot_temps.py --csv data.csv
+    python3 update_temperatures.py --csv data.csv
 
 Run this on a machine that's actually on the same local network as the device.
 """
